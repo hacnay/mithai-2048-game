@@ -53,6 +53,36 @@ cordova platform add android
 cordova build android
 ```
 
+### Deploy to Netlify
+
+#### Option 1: Deploy via Netlify UI (Recommended)
+1. Go to [Netlify](https://app.netlify.com/)
+2. Sign up/Login with your GitHub account
+3. Click "Add new site" → "Import an existing project"
+4. Select your GitHub repository: `hacnay/mithai-2048-game`
+5. Netlify will auto-detect the settings:
+   - **Build command**: (leave empty or use: `echo 'No build step'`)
+   - **Publish directory**: `.` (root directory)
+6. Click "Deploy site"
+7. Your site will be live at `https://your-site-name.netlify.app`
+
+#### Option 2: Deploy via Netlify CLI
+```bash
+# Install Netlify CLI globally
+npm install -g netlify-cli
+
+# Login to Netlify
+netlify login
+
+# Deploy to Netlify
+netlify deploy --prod
+```
+
+#### Option 3: Drag & Drop
+1. Go to [Netlify Drop](https://app.netlify.com/drop)
+2. Drag and drop your project folder
+3. Your site will be instantly live!
+
 ## 🎯 How to Play
 
 1. **Use Arrow Keys** (desktop) or **Swipe** (mobile) to move tiles
