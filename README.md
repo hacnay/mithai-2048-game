@@ -130,7 +130,10 @@ This project is open source and available under the MIT License.
 
 ## 👨‍💻 Author
 
-**subhang**
+**Subhang**
+
+- 🔗 [GitHub](https://github.com/hacnay)
+- 💼 [LinkedIn](https://www.linkedin.com/in/hacnay/)
 
 ## 🙏 Acknowledgments
 
