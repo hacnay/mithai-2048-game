@@ -1,3 +1,4 @@
+// Game Constants
 const mithaiNames = {
   2: 'Boondi', 4: 'Motichoor', 8: 'Barfi', 16: 'Kaju Katli',
   32: 'Rasgulla', 64: 'Gulab Jamun', 128: 'Rasmalai',
@@ -32,6 +33,8 @@ const sweetFacts = [
   "Thali is not just a meal but an experience that often ends with a variety of sweets like rasgulla, jalebi, or gulab jamun, making it a perfect finale to a festive feast."
 ];
 
+// DOM Elements
+const container = document.querySelector('.container');
 const scoreDisplay = document.getElementById("score-display");
 const challengeBox = document.getElementById("challenge");
 const factBox = document.getElementById("sweet-fact");
@@ -46,8 +49,26 @@ const achievementBadge = document.getElementById("achievement-badge");
 const bestScoreDisplay = document.getElementById("best-score-display");
 const bonusIndicator = document.getElementById("bonus-indicator");
 const bonusAmount = document.getElementById("bonus-amount");
+const undoBtn = document.getElementById("undo-btn");
+const undoCountDisplay = document.getElementById("undo-count");
+const hintBtn = document.getElementById("hint-btn");
+const shuffleBtn = document.getElementById("shuffle-btn");
+const removeBtn = document.getElementById("remove-btn");
+const freezeBtn = document.getElementById("freeze-btn");
+const doubleBtn = document.getElementById("double-btn");
+const timerDisplay = document.getElementById("timer-display");
+const timerCard = document.getElementById("timer-card");
+const targetMovesDisplay = document.getElementById("target-moves-display");
+const targetMovesCard = document.getElementById("target-moves-card");
+const targetCard = document.getElementById("target-card");
+const targetTileName = document.getElementById("target-tile-name");
+const targetTileValue = document.getElementById("target-tile-value");
+const targetProgressText = document.getElementById("target-progress-text");
+const challengeCard = document.getElementById("challenge-card");
 
-let grid = Array(4).fill(null).map(() => Array(4).fill(0));
+// Game State
+let grid = [];
+let boardSize = 4;
 let moveCount = 0;
 let score = 0;
 let mergeCounts = {};
@@ -55,15 +76,279 @@ let targetReached = false;
 let startX, startY;
 let comboCount = 0;
 let lastMoveMerges = 0;
+let gameMode = 'classic'; // classic, time, endless, target
+let undoHistory = [];
+let maxUndos = 3;
+let undoCount = maxUndos;
+let hintActive = false;
+let removeMode = false;
+let freezeMoves = 0;
+let doubleMergeActive = false;
+let timerInterval = null;
+let timeLeft = 60;
+let targetMoves = 50;
+let targetTile = 2048;
+let highestTile = 0;
 
-const challengeOptions = Object.entries(mithaiNames);
-const today = new Date().toDateString();
-const randomIndex = [...today].reduce((acc, char) => acc + char.charCodeAt(0), 0) % challengeOptions.length;
-const [targetValue, targetName] = challengeOptions[randomIndex];
-const targetAmount = (randomIndex % 3 + 2);
-challengeBox.textContent = `🎯 Daily Challenge: Merge ${targetAmount} ${targetName}s!`;
-updateChallengeProgress(0);
+// Challenge setup (will be initialized in init)
+let targetValue, targetName, targetAmount;
 
+// Initialize grid based on board size
+function initGrid(size) {
+  boardSize = size;
+  grid = Array(size).fill(null).map(() => Array(size).fill(0));
+  updateBoardSize();
+}
+
+// Update board CSS grid based on size
+function updateBoardSize() {
+  board.style.gridTemplateColumns = `repeat(${boardSize}, 1fr)`;
+  board.style.gridTemplateRows = `repeat(${boardSize}, 1fr)`;
+}
+
+// Save game state for undo
+function saveState() {
+  if (undoHistory.length >= maxUndos) {
+    undoHistory.shift();
+  }
+  undoHistory.push({
+    grid: grid.map(row => [...row]),
+    score: score,
+    moveCount: moveCount,
+    mergeCounts: {...mergeCounts}
+  });
+  updateUndoButton();
+}
+
+// Undo last move
+function undoMove() {
+  if (undoHistory.length === 0 || undoCount <= 0) {
+    showAchievement("No undos left!");
+    return;
+  }
+  
+  const state = undoHistory.pop();
+  grid = state.grid.map(row => [...row]);
+  score = state.score;
+  moveCount = state.moveCount;
+  mergeCounts = {...state.mergeCounts};
+  undoCount--;
+  
+  updateScore();
+  updateMoveCounter();
+  updateUndoButton();
+  drawBoard();
+  gameOverBox.classList.remove('show');
+  showAchievement("Move undone!");
+}
+
+function updateUndoButton() {
+  undoCountDisplay.textContent = undoCount;
+  undoBtn.disabled = undoHistory.length === 0 || undoCount <= 0;
+}
+
+// Calculate best move (hint system)
+function calculateBestMove() {
+  const directions = ['up', 'down', 'left', 'right'];
+  let bestDir = null;
+  let bestScore = -1;
+  let bestEmptyCount = -1;
+  
+  for (const dir of directions) {
+    const testGrid = grid.map(row => [...row]);
+    const result = simulateMove(testGrid, dir);
+    
+    if (result.moved) {
+      // Count empty cells after move
+      let emptyCount = 0;
+      result.grid.forEach(row => {
+        row.forEach(cell => {
+          if (cell === 0) emptyCount++;
+        });
+      });
+      
+      // Prefer moves that create more space and higher scores
+      const moveScore = result.score + emptyCount * 10;
+      if (moveScore > bestScore || (moveScore === bestScore && emptyCount > bestEmptyCount)) {
+        bestScore = moveScore;
+        bestEmptyCount = emptyCount;
+        bestDir = dir;
+      }
+    }
+  }
+  
+  return bestDir;
+}
+
+// Simulate a move without actually executing it
+function simulateMove(testGrid, dir) {
+  const size = testGrid.length;
+  let rotated = false;
+  let moved = false;
+  let scoreGain = 0;
+  
+  if (dir === 'up' || dir === 'down') {
+    testGrid = testGrid[0].map((_, i) => testGrid.map(row => row[i]));
+    rotated = true;
+  }
+  if (dir === 'right' || dir === 'down') {
+    testGrid = testGrid.map(row => row.reverse());
+  }
+  
+  let newGrid = testGrid.map(row => {
+    let arr = row.filter(val => val);
+    let merged = Array(size).fill(false);
+    
+    for (let i = 0; i < arr.length - 1; i++) {
+      if (arr[i] === arr[i + 1] && !merged[i]) {
+        arr[i] *= 2;
+        arr[i + 1] = 0;
+        merged[i] = true;
+        scoreGain += arr[i];
+        moved = true;
+      }
+    }
+    return arr.filter(val => val).concat(Array(size - arr.filter(val => val).length).fill(0));
+  });
+  
+  if (dir === 'right' || dir === 'down') {
+    newGrid = newGrid.map(row => row.reverse());
+  }
+  if (rotated) {
+    newGrid = newGrid[0].map((_, i) => newGrid.map(row => row[i]));
+  }
+  
+  moved = moved || JSON.stringify(testGrid) !== JSON.stringify(newGrid);
+  
+  return { grid: newGrid, moved, score: scoreGain };
+}
+
+// Show hint
+function showHint() {
+  if (hintActive) {
+    // Remove existing hint
+    board.querySelectorAll('.hint-indicator').forEach(el => el.remove());
+    hintActive = false;
+    hintBtn.textContent = '💡 Hint';
+    return;
+  }
+  
+  const bestDir = calculateBestMove();
+  if (!bestDir) {
+    showAchievement("No valid moves available!");
+    return;
+  }
+  
+  // Add visual indicator
+  board.querySelectorAll('.hint-indicator').forEach(el => el.remove());
+  const indicator = document.createElement('div');
+  indicator.classList.add('hint-indicator');
+  board.appendChild(indicator);
+  
+  hintActive = true;
+  hintBtn.textContent = '💡 Hide';
+  showAchievement(`Best move: ${bestDir.toUpperCase()}`);
+  
+  // Auto-hide after 3 seconds
+  setTimeout(() => {
+    indicator.remove();
+    hintActive = false;
+    hintBtn.textContent = '💡 Hint';
+  }, 3000);
+}
+
+// Power-up: Shuffle
+function shuffleTiles() {
+  let allTiles = [];
+  grid.forEach((row, r) => {
+    row.forEach((val, c) => {
+      if (val !== 0) allTiles.push(val);
+      grid[r][c] = 0;
+    });
+  });
+  
+  // Shuffle array
+  for (let i = allTiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [allTiles[i], allTiles[j]] = [allTiles[j], allTiles[i]];
+  }
+  
+  // Place shuffled tiles back
+  let idx = 0;
+  grid.forEach((row, r) => {
+    row.forEach((val, c) => {
+      if (val === 0 && idx < allTiles.length) {
+        grid[r][c] = allTiles[idx++];
+      }
+    });
+  });
+  
+  drawBoard();
+  showAchievement("Tiles shuffled!");
+}
+
+// Power-up: Remove tile
+function activateRemoveMode() {
+  if (removeMode) {
+    removeMode = false;
+    removeBtn.classList.remove('active');
+    board.querySelectorAll('.tile.selectable').forEach(t => t.classList.remove('selectable'));
+    return;
+  }
+  
+  removeMode = true;
+  removeBtn.classList.add('active');
+  
+  // Make all tiles selectable
+  board.querySelectorAll('.tile:not(.empty)').forEach(tile => {
+    tile.classList.add('selectable');
+    tile.addEventListener('click', handleTileRemove, { once: true });
+  });
+  
+  showAchievement("Click a tile to remove it");
+}
+
+function handleTileRemove(e) {
+  const tiles = Array.from(board.querySelectorAll('.tile'));
+  const index = tiles.indexOf(e.target);
+  const row = Math.floor(index / boardSize);
+  const col = index % boardSize;
+  
+  grid[row][col] = 0;
+  removeMode = false;
+  removeBtn.classList.remove('active');
+  board.querySelectorAll('.tile.selectable').forEach(t => {
+    t.classList.remove('selectable');
+    t.removeEventListener('click', handleTileRemove);
+  });
+  
+  drawBoard();
+  showAchievement("Tile removed!");
+}
+
+// Power-up: Freeze
+function activateFreeze() {
+  freezeMoves = 3;
+  freezeBtn.classList.add('active');
+  freezeBtn.disabled = true;
+  showAchievement("New tiles frozen for 3 moves!");
+  
+  setTimeout(() => {
+    freezeMoves = 0;
+    freezeBtn.classList.remove('active');
+    freezeBtn.disabled = false;
+  }, 3000);
+}
+
+// Power-up: Double merge
+function activateDoubleMerge() {
+  doubleMergeActive = true;
+  doubleBtn.classList.add('active');
+  doubleBtn.disabled = true;
+  showAchievement("Next merge will count double!");
+}
+
+// Update score display
 function updateScore() {
   scoreDisplay.textContent = score.toLocaleString();
   scoreDisplay.classList.add('score-pop');
@@ -73,6 +358,17 @@ function updateScore() {
 function showAchievement(message) {
   achievementBadge.textContent = message;
   achievementBadge.classList.add('show');
+  
+  // Play achievement sound
+  if (window.audioManager) {
+    window.audioManager.playAchievementSound();
+  }
+  
+  // Create confetti
+  if (window.particleSystem) {
+    window.particleSystem.createConfetti(150);
+  }
+  
   setTimeout(() => {
     achievementBadge.classList.remove('show');
   }, 3000);
@@ -92,6 +388,15 @@ function showBonus(bonusPoints, comboCount) {
 }
 
 function spawnTile() {
+  if (freezeMoves > 0) {
+    freezeMoves--;
+    if (freezeMoves === 0) {
+      freezeBtn.classList.remove('active');
+      freezeBtn.disabled = false;
+    }
+    return;
+  }
+  
   let empty = [];
   grid.forEach((row, r) => {
     row.forEach((val, c) => {
@@ -104,37 +409,123 @@ function spawnTile() {
   drawBoard();
 }
 
+// Store previous grid for animation
+let previousGrid = [];
+
 function drawBoard() {
-  board.querySelectorAll('.tile').forEach(t => t.remove());
-  grid.forEach((row) => {
-    row.forEach((val) => {
-      const tile = document.createElement('div');
-      tile.classList.add('tile');
+  board.querySelectorAll('.hint-indicator').forEach(t => t.remove());
+  
+  // Create new tiles with smooth animations
+  grid.forEach((row, r) => {
+    row.forEach((val, c) => {
+      const index = r * boardSize + c;
+      let tile = board.querySelector(`.tile[data-index="${index}"]`);
+      
+      if (!tile) {
+        tile = document.createElement('div');
+        tile.classList.add('tile');
+        tile.setAttribute('data-index', index);
+        tile.style.opacity = '0';
+        board.appendChild(tile);
+      }
+      
+      // Update tile content
       if (val !== 0) {
+        const prevVal = previousGrid[r] && previousGrid[r][c];
         tile.textContent = mithaiNames[val] || val;
         tile.style.background = mithaiColors[val] || '#ffe0b2';
+        tile.classList.remove('empty');
         tile.classList.add('new');
+        
+        // Animate if value changed
+        if (prevVal !== val) {
+          tile.style.animation = 'none';
+          setTimeout(() => {
+            tile.style.animation = 'tilePop 0.3s ease';
+          }, 10);
+        }
       } else {
         tile.classList.add('empty');
+        tile.classList.remove('new');
+        tile.textContent = '';
+        tile.style.background = '';
       }
-      board.appendChild(tile);
+      
+      // Smooth fade in
+      setTimeout(() => {
+        tile.style.opacity = '1';
+      }, 50);
     });
   });
+  
+  // Remove tiles that no longer exist
+  board.querySelectorAll('.tile').forEach(tile => {
+    const index = parseInt(tile.getAttribute('data-index'));
+    const r = Math.floor(index / boardSize);
+    const c = index % boardSize;
+    if (r >= boardSize || c >= boardSize || !grid[r] || grid[r][c] === undefined) {
+      tile.remove();
+    }
+  });
+  
+  // Save current grid for next animation
+  previousGrid = grid.map(row => [...row]);
+  
+  // Update highest tile for target mode
+  if (gameMode === 'target') {
+    let max = 0;
+    grid.forEach(row => {
+      row.forEach(val => {
+        if (val > max) max = val;
+      });
+    });
+    highestTile = max;
+    targetProgressText.textContent = `Highest: ${mithaiNames[highestTile] || highestTile} (${highestTile})`;
+    
+    if (highestTile >= targetTile) {
+      showAchievement("🎉 Target reached! You win!");
+      if (timerInterval) clearInterval(timerInterval);
+    }
+  }
 }
 
 function slide(row) {
   let arr = row.filter(val => val);
-  let merged = Array(4).fill(false);
+  let merged = Array(boardSize).fill(false);
   
   for (let i = 0; i < arr.length - 1; i++) {
     if (arr[i] === arr[i + 1] && !merged[i]) {
-      arr[i] *= 2;
+      const mergedValue = arr[i] * 2;
+      arr[i] = mergedValue;
       arr[i + 1] = 0;
       merged[i] = true;
-      lastMoveMerges++; // Track total merges in this move
+      lastMoveMerges++;
       
-      // Calculate score with combo bonus
-      let baseScore = arr[i];
+      // Play merge sound
+      if (window.audioManager) {
+        window.audioManager.playMergeSound(mergedValue);
+      }
+      
+      // Create particle effect (will be triggered after board redraw)
+      setTimeout(() => {
+        const tiles = board.querySelectorAll('.tile:not(.empty)');
+        tiles.forEach(tile => {
+          if (tile.textContent === (mithaiNames[mergedValue] || mergedValue)) {
+            if (window.particleSystem) {
+              window.particleSystem.createMergeParticles(tile, mergedValue);
+            }
+          }
+        });
+      }, 100);
+      
+      let baseScore = mergedValue;
+      if (doubleMergeActive) {
+        baseScore *= 2;
+        doubleMergeActive = false;
+        doubleBtn.classList.remove('active');
+        doubleBtn.disabled = false;
+      }
+      
       let comboMultiplier = lastMoveMerges > 1 ? 1 + (lastMoveMerges - 1) * 0.3 : 1;
       let finalScore = Math.floor(baseScore * comboMultiplier);
       let bonusPoints = finalScore - baseScore;
@@ -142,67 +533,106 @@ function slide(row) {
       score += finalScore;
       updateScore();
       
-      // Show bonus indicator if bonus was earned
       if (bonusPoints > 0) {
         showBonus(bonusPoints, lastMoveMerges);
       }
       
-      // Update merge count first, then check challenge progress
-      mergeCounts[arr[i]] = (mergeCounts[arr[i]] || 0) + 1;
-      updateChallengeProgress(arr[i]);
+      mergeCounts[mergedValue] = (mergeCounts[mergedValue] || 0) + 1;
+      updateChallengeProgress(mergedValue);
       
-      if (arr[i] === 2048 && !window.hasWon) {
+      if (mergedValue === 2048 && !window.hasWon && gameMode !== 'endless') {
         window.hasWon = true;
-        setTimeout(() => showAchievement("🎉 You've unlocked the Thali! You're a Mithai Master!"), 200);
+        setTimeout(() => {
+          showAchievement("🎉 You've unlocked the Thali! You're a Mithai Master!");
+          // Extra confetti for 2048
+          if (window.particleSystem) {
+            setTimeout(() => window.particleSystem.createConfetti(200), 500);
+          }
+        }, 200);
       }
       triggerSweetFact();
     }
   }
-  return arr.filter(val => val).concat(Array(4 - arr.filter(val => val).length).fill(0));
+  return arr.filter(val => val).concat(Array(boardSize - arr.filter(val => val).length).fill(0));
 }
 
 function move(dir) {
-  let rotated = false;
-  lastMoveMerges = 0; // Reset merge count for this move
+  if (removeMode) return;
   
-  if (dir === 'up' || dir === 'down') {
-    grid = grid[0].map((_, i) => grid.map(row => row[i]));
-    rotated = true;
-  }
-  if (dir === 'right' || dir === 'down') {
-    grid = grid.map(row => row.reverse());
-  }
-  let newGrid = grid.map(row => slide(row));
-  if (dir === 'right' || dir === 'down') {
-    newGrid = newGrid.map(row => row.reverse());
-  }
-  if (rotated) {
-    newGrid = newGrid[0].map((_, i) => newGrid.map(row => row[i]));
-  }
-  if (JSON.stringify(grid) !== JSON.stringify(newGrid)) {
-    grid = newGrid;
+  try {
+    let rotated = false;
+    lastMoveMerges = 0;
     
-    // Check for combo (multiple merges in one move)
-    if (lastMoveMerges > 1) {
-      comboCount++;
-      if (comboCount >= 2) {
-        showAchievement(`🔥 ${lastMoveMerges}x Combo! Amazing!`);
+    // Save state before move for undo
+    saveState();
+    
+    if (dir === 'up' || dir === 'down') {
+      grid = grid[0].map((_, i) => grid.map(row => row[i]));
+      rotated = true;
+    }
+    if (dir === 'right' || dir === 'down') {
+      grid = grid.map(row => row.reverse());
+    }
+    let newGrid = grid.map(row => slide(row));
+    if (dir === 'right' || dir === 'down') {
+      newGrid = newGrid.map(row => row.reverse());
+    }
+    if (rotated) {
+      newGrid = newGrid[0].map((_, i) => newGrid.map(row => row[i]));
+    }
+    
+    if (JSON.stringify(grid) !== JSON.stringify(newGrid)) {
+      grid = newGrid;
+      
+      // Play move sound
+      if (window.audioManager) {
+        window.audioManager.playMoveSound();
+      }
+      
+      if (lastMoveMerges > 1) {
+        comboCount++;
+        if (comboCount >= 2) {
+          showAchievement(`🔥 ${lastMoveMerges}x Combo! Amazing!`);
+        }
+      } else {
+        comboCount = 0;
+      }
+      
+      spawnTile();
+      moveCount++;
+      updateMoveCounter();
+      
+      // Update target mode moves
+      if (gameMode === 'target' && targetMovesDisplay) {
+        targetMoves--;
+        targetMovesDisplay.textContent = targetMoves;
+        if (targetMoves <= 0 && highestTile < targetTile) {
+          showGameOver();
+          return;
+        }
+      }
+      
+      if (isGameOver()) {
+        showGameOver();
       }
     } else {
+      // Invalid move - remove from undo history
+      undoHistory.pop();
+      if (board) {
+        board.style.animation = 'none';
+        setTimeout(() => {
+          board.style.animation = 'shake 0.3s ease';
+        }, 10);
+      }
       comboCount = 0;
     }
     
-    spawnTile();
-    moveCount++;
-    updateMoveCounter();
-    if (isGameOver()) showGameOver();
-  } else {
-    // Provide feedback for invalid moves
-    board.style.animation = 'none';
-    setTimeout(() => {
-      board.style.animation = 'shake 0.3s ease';
-    }, 10);
-    comboCount = 0;
+    updateUndoButton();
+  } catch (error) {
+    if (window.errorHandler) {
+      window.errorHandler.showGameError('Move failed. Please try again.');
+    }
+    console.error('Move error:', error);
   }
 }
 
@@ -230,16 +660,20 @@ function updateChallengeProgress(val) {
     if (current >= targetAmount && !targetReached) {
       targetReached = true;
       showAchievement("🎯 Challenge Complete! You're a Mithai Champion!");
+      // Confetti for challenge completion
+      if (window.particleSystem) {
+        setTimeout(() => window.particleSystem.createConfetti(100), 300);
+      }
     }
   }
 }
 
 function isGameOver() {
-  for (let r = 0; r < 4; r++) {
-    for (let c = 0; c < 4; c++) {
+  for (let r = 0; r < boardSize; r++) {
+    for (let c = 0; c < boardSize; c++) {
       if (grid[r][c] === 0) return false;
-      if (c < 3 && grid[r][c] === grid[r][c + 1]) return false;
-      if (r < 3 && grid[r][c] === grid[r + 1][c]) return false;
+      if (c < boardSize - 1 && grid[r][c] === grid[r][c + 1]) return false;
+      if (r < boardSize - 1 && grid[r][c] === grid[r + 1][c]) return false;
     }
   }
   return true;
@@ -252,7 +686,6 @@ function updateLeaderboard() {
   localStorage.setItem("mithaiScores", JSON.stringify(sorted));
   leaderboardList.innerHTML = sorted.map(s => `<li>${s.toLocaleString()} points</li>`).join("");
   
-  // Update best score display
   const bestScore = sorted.length > 0 ? sorted[0] : 0;
   const currentBest = parseInt(localStorage.getItem("mithaiBestScore") || "0");
   if (score > currentBest) {
@@ -266,32 +699,197 @@ function updateLeaderboard() {
 }
 
 function showGameOver() {
+  if (timerInterval) {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
   gameOverBox.classList.add('show');
   updateLeaderboard();
 }
 
-function restartGame() {
-  grid = Array(4).fill(null).map(() => Array(4).fill(0));
-  moveCount = 0;
-  score = 0;
-  mergeCounts = {};
-  targetReached = false;
-  window.hasWon = false;
-  comboCount = 0;
-  lastMoveMerges = 0;
-  gameOverBox.classList.remove('show');
-  updateMoveCounter();
-  updateScore();
-  // Reset challenge progress display
-  challengeProgressText.textContent = `Progress: 0 / ${targetAmount}`;
-  progressBar.style.width = '0%';
-  spawnTile();
-  spawnTile();
-  drawBoard();
+// Timer for Time mode
+function startTimer() {
+  if (timerInterval) clearInterval(timerInterval);
+  
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    timerDisplay.textContent = timeLeft;
+    
+    if (timeLeft <= 10) {
+      timerDisplay.style.color = '#f44336';
+    }
+    
+    if (timeLeft <= 0) {
+      clearInterval(timerInterval);
+      showGameOver();
+    }
+  }, 1000);
 }
 
-restartBtn.addEventListener('click', restartGame);
+// Change game mode
+function changeGameMode(mode) {
+  gameMode = mode;
+  
+  // Update UI
+  document.querySelectorAll('.mode-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
+  });
+  
+  // Show/hide relevant cards
+  timerCard.style.display = mode === 'time' ? 'block' : 'none';
+  targetMovesCard.style.display = mode === 'target' ? 'block' : 'none';
+  targetCard.style.display = mode === 'target' ? 'block' : 'none';
+  challengeCard.style.display = mode === 'classic' ? 'block' : 'none';
+  
+  // Reset game
+  restartGame();
+  
+  // Start timer for time mode
+  if (mode === 'time') {
+    timeLeft = 60;
+    timerDisplay.textContent = timeLeft;
+    timerDisplay.style.color = '#5d4037';
+    startTimer();
+  }
+  
+  // Setup target mode
+  if (mode === 'target') {
+    const targetOptions = [256, 512, 1024, 2048];
+    targetTile = targetOptions[Math.floor(Math.random() * targetOptions.length)];
+    targetTileName.textContent = mithaiNames[targetTile];
+    targetTileValue.textContent = targetTile;
+    targetMoves = 50;
+    targetMovesDisplay.textContent = targetMoves;
+    highestTile = 0;
+  }
+}
 
+// Change board size
+function changeBoardSize(size) {
+  boardSize = parseInt(size);
+  
+  document.querySelectorAll('.size-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.size === size);
+  });
+  
+  restartGame();
+}
+
+function restartGame() {
+  try {
+    // Smooth transition
+    if (container) {
+      container.classList.add('fade-in');
+    }
+    
+    initGrid(boardSize);
+    previousGrid = grid.map(row => [...row]); // Initialize previous grid
+    moveCount = 0;
+    score = 0;
+    mergeCounts = {};
+    targetReached = false;
+    window.hasWon = false;
+    comboCount = 0;
+    lastMoveMerges = 0;
+    undoHistory = [];
+    undoCount = maxUndos;
+    hintActive = false;
+    removeMode = false;
+    freezeMoves = 0;
+    doubleMergeActive = false;
+    highestTile = 0;
+    
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    
+    if (gameMode === 'time' && timerDisplay) {
+      timeLeft = 60;
+      timerDisplay.textContent = timeLeft;
+      timerDisplay.style.color = '#5d4037';
+      startTimer();
+    }
+    
+    if (gameMode === 'target' && targetMovesDisplay) {
+      targetMoves = 50;
+      targetMovesDisplay.textContent = targetMoves;
+    }
+    
+    if (gameOverBox) {
+      gameOverBox.classList.remove('show');
+    }
+    updateMoveCounter();
+    updateScore();
+    updateUndoButton();
+    if (gameMode === 'classic') {
+      if (challengeProgressText) {
+        challengeProgressText.textContent = `Progress: 0 / ${targetAmount}`;
+      }
+      if (progressBar) {
+        progressBar.style.width = '0%';
+      }
+      targetReached = false;
+    }
+    
+    // Remove hint indicators
+    if (board) {
+      board.querySelectorAll('.hint-indicator').forEach(el => el.remove());
+    }
+    if (hintBtn) {
+      hintBtn.textContent = '💡 Hint';
+    }
+    hintActive = false;
+    
+    // Reset power-up buttons
+    if (removeBtn) removeBtn.classList.remove('active');
+    if (freezeBtn) {
+      freezeBtn.classList.remove('active');
+      freezeBtn.disabled = false;
+    }
+    if (doubleBtn) {
+      doubleBtn.classList.remove('active');
+      doubleBtn.disabled = false;
+    }
+    
+    spawnTile();
+    spawnTile();
+    drawBoard();
+    
+    // Remove fade-in class after animation
+    if (container) {
+      setTimeout(() => {
+        container.classList.remove('fade-in');
+      }, 500);
+    }
+  } catch (error) {
+    if (window.errorHandler) {
+      window.errorHandler.showGameError('Failed to restart game. Please try again.');
+    }
+    console.error('Restart error:', error);
+  }
+}
+
+// Event Listeners
+restartBtn.addEventListener('click', restartGame);
+undoBtn.addEventListener('click', undoMove);
+hintBtn.addEventListener('click', showHint);
+shuffleBtn.addEventListener('click', shuffleTiles);
+removeBtn.addEventListener('click', activateRemoveMode);
+freezeBtn.addEventListener('click', activateFreeze);
+doubleBtn.addEventListener('click', activateDoubleMerge);
+
+// Mode selector
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => changeGameMode(btn.dataset.mode));
+});
+
+// Size selector
+document.querySelectorAll('.size-btn').forEach(btn => {
+  btn.addEventListener('click', () => changeBoardSize(btn.dataset.size));
+});
+
+// Keyboard controls
 document.addEventListener('keydown', e => {
   if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.key)) {
     e.preventDefault();
@@ -299,6 +897,7 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// Touch controls
 board.addEventListener('touchstart', e => {
   e.preventDefault();
   startX = e.touches[0].clientX;
@@ -317,17 +916,17 @@ board.addEventListener('touchend', e => {
   const minSwipe = 30;
   
   if (Math.abs(dx) > minSwipe || Math.abs(dy) > minSwipe) {
-  if (Math.abs(dx) > Math.abs(dy)) {
-    move(dx > 0 ? 'right' : 'left');
-  } else {
-    move(dy > 0 ? 'down' : 'up');
-  }
+    if (Math.abs(dx) > Math.abs(dy)) {
+      move(dx > 0 ? 'right' : 'left');
+    } else {
+      move(dy > 0 ? 'down' : 'up');
+    }
   }
   startX = null;
   startY = null;
 }, { passive: false });
 
-// Prevent pull-to-refresh and other unwanted gestures
+// Prevent pull-to-refresh
 document.addEventListener('touchmove', function(e) {
   if (e.target.closest('#game-board')) {
     e.preventDefault();
@@ -344,18 +943,30 @@ document.addEventListener('touchend', function(e) {
   lastTouchEnd = now;
 }, false);
 
-// Lock screen orientation on mobile (if supported)
+// Lock screen orientation
 if (screen.orientation && screen.orientation.lock) {
   screen.orientation.lock('portrait').catch(() => {});
 }
 
 function init() {
+  // Initialize challenge
+  const challengeOptions = Object.entries(mithaiNames);
+  const today = new Date().toDateString();
+  const randomIndex = [...today].reduce((acc, char) => acc + char.charCodeAt(0), 0) % challengeOptions.length;
+  [targetValue, targetName] = challengeOptions[randomIndex];
+  targetAmount = (randomIndex % 3 + 2);
+  challengeBox.textContent = `🎯 Daily Challenge: Merge ${targetAmount} ${targetName}s!`;
+  challengeProgressText.textContent = `Progress: 0 / ${targetAmount}`;
+  progressBar.style.width = '0%';
+  
+  initGrid(4);
+  previousGrid = grid.map(row => [...row]); // Initialize previous grid
   spawnTile();
   spawnTile();
   updateLeaderboard();
   updateScore();
   updateMoveCounter();
-  // Load and display best score
+  updateUndoButton();
   const bestScore = parseInt(localStorage.getItem("mithaiBestScore") || "0");
   bestScoreDisplay.textContent = bestScore.toLocaleString();
 }
@@ -366,4 +977,3 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
-

@@ -10,15 +10,198 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
+  <!-- Loading Screen -->
+  <div class="loading-screen" id="loading-screen">
+    <div class="loading-content">
+      <div class="loading-logo">🍬</div>
+      <div class="loading-title">Mithai Merge Mania</div>
+      <div class="loading-text-fill">
+        <span class="loading-text-fill-inner">Loading sweet magic...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Error Toast -->
+  <div class="error-toast" id="error-toast">
+    <div class="error-icon">⚠️</div>
+    <div class="error-message" id="error-message">An error occurred</div>
+    <button class="error-close" id="error-close">×</button>
+  </div>
+
+  <!-- Onboarding Overlay -->
+  <div class="onboarding-overlay" id="onboarding-overlay" style="display: none;">
+    <div class="onboarding-content">
+      <div class="onboarding-slide active" data-slide="0">
+        <div class="onboarding-icon">🍬</div>
+        <h2>Welcome to Mithai Merge Mania!</h2>
+        <p>Swipe or use arrow keys to merge mithai tiles. Match two identical tiles to create a new, bigger mithai!</p>
+        <div class="onboarding-dots">
+          <span class="dot active"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <button class="onboarding-btn" onclick="onboardingNext()">Next</button>
+      </div>
+      <div class="onboarding-slide" data-slide="1">
+        <div class="onboarding-icon">🎮</div>
+        <h2>Game Modes</h2>
+        <p><strong>Classic:</strong> Reach 2048 to win<br>
+        <strong>Time:</strong> Race against the clock<br>
+        <strong>Endless:</strong> Keep playing after 2048<br>
+        <strong>Target:</strong> Reach a specific tile in limited moves</p>
+        <div class="onboarding-dots">
+          <span class="dot"></span>
+          <span class="dot active"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+        <button class="onboarding-btn" onclick="onboardingNext()">Next</button>
+      </div>
+      <div class="onboarding-slide" data-slide="2">
+        <div class="onboarding-icon">⚡</div>
+        <h2>Power-ups & Features</h2>
+        <p><strong>Undo:</strong> Go back 1-3 moves<br>
+        <strong>Hint:</strong> See the best next move<br>
+        <strong>Shuffle:</strong> Rearrange tiles<br>
+        <strong>Remove:</strong> Delete one tile<br>
+        <strong>Freeze:</strong> Stop new tiles for 3 moves<br>
+        <strong>Double:</strong> Next merge counts double</p>
+        <div class="onboarding-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot active"></span>
+          <span class="dot"></span>
+        </div>
+        <button class="onboarding-btn" onclick="onboardingNext()">Next</button>
+      </div>
+      <div class="onboarding-slide" data-slide="3">
+        <div class="onboarding-icon">🎉</div>
+        <h2>Ready to Play!</h2>
+        <p>Merge tiles, unlock achievements, and become a Mithai Master! Use the settings button (⚙️) to customize your experience.</p>
+        <div class="onboarding-dots">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot active"></span>
+        </div>
+        <button class="onboarding-btn" onclick="onboardingComplete()">Start Playing!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help/FAQ Modal -->
+  <div class="help-modal" id="help-modal" style="display: none;">
+    <div class="help-content">
+      <div class="help-header">
+        <h2>📖 Help & FAQ</h2>
+        <button class="help-close" id="help-close">×</button>
+      </div>
+      <div class="help-body">
+        <div class="help-section">
+          <h3>🎮 How to Play</h3>
+          <p>Use arrow keys or swipe to move tiles. When two identical tiles touch, they merge into one!</p>
+        </div>
+        <div class="help-section">
+          <h3>🎯 Game Modes</h3>
+          <ul>
+            <li><strong>Classic:</strong> Reach 2048 (Thali) to win</li>
+            <li><strong>Time:</strong> Score as much as possible in 60 seconds</li>
+            <li><strong>Endless:</strong> Continue playing after reaching 2048</li>
+            <li><strong>Target:</strong> Reach a specific tile within 50 moves</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>⚡ Power-ups</h3>
+          <ul>
+            <li><strong>Undo:</strong> Go back 1-3 moves (3 per game)</li>
+            <li><strong>Hint:</strong> Shows the best next move</li>
+            <li><strong>Shuffle:</strong> Randomly rearranges all tiles</li>
+            <li><strong>Remove:</strong> Click to delete one tile</li>
+            <li><strong>Freeze:</strong> Prevents new tiles for 3 moves</li>
+            <li><strong>Double:</strong> Next merge scores double points</li>
+          </ul>
+        </div>
+        <div class="help-section">
+          <h3>🎨 Customization</h3>
+          <p>Click the settings button (⚙️) to change themes, toggle sounds, and adjust board size.</p>
+        </div>
+        <div class="help-section">
+          <h3>❓ Tips</h3>
+          <ul>
+            <li>Try to keep your highest tile in a corner</li>
+            <li>Plan your moves ahead</li>
+            <li>Use hints when stuck</li>
+            <li>Save your undos for critical moments</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div class="achievement-badge" id="achievement-badge"></div>
   <div class="bonus-indicator" id="bonus-indicator">
     <div>🎁 BONUS!</div>
     <div class="bonus-amount" id="bonus-amount">+0</div>
   </div>
   
+  <!-- Settings Panel -->
+  <div class="settings-panel">
+    <button class="settings-btn" id="settings-toggle" title="Settings">⚙️</button>
+    <div class="settings-menu" id="settings-menu" style="display: none;">
+      <div class="settings-section">
+        <div class="settings-title">Theme</div>
+        <div class="theme-buttons">
+          <button class="theme-btn active" data-theme="light">☀️ Light</button>
+          <button class="theme-btn" data-theme="dark">🌙 Dark</button>
+          <button class="theme-btn" data-theme="colorful">🌈 Colorful</button>
+          <button class="theme-btn" data-theme="classic">🎨 Classic</button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-title">Audio</div>
+        <div class="audio-controls">
+          <button class="audio-btn" id="sound-toggle">
+            <span id="sound-icon">🔊</span> Sounds
+          </button>
+          <button class="audio-btn" id="music-toggle">
+            <span id="music-icon">🎵</span> Music
+          </button>
+        </div>
+      </div>
+      <div class="settings-section">
+        <button class="help-btn" id="help-btn">📖 Help & FAQ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Canvas for particle effects -->
+  <canvas id="particle-canvas"></canvas>
+
   <div class="container">
     <div class="header">
       <h1>🍬 Mithai Merge Mania 🍬</h1>
+    </div>
+
+    <!-- Game Mode Selector -->
+    <div class="mode-selector">
+      <div class="mode-title">Game Mode:</div>
+      <div class="mode-buttons">
+        <button class="mode-btn active" data-mode="classic">Classic</button>
+        <button class="mode-btn" data-mode="time">Time</button>
+        <button class="mode-btn" data-mode="endless">Endless</button>
+        <button class="mode-btn" data-mode="target">Target</button>
+      </div>
+    </div>
+
+    <!-- Board Size Selector -->
+    <div class="size-selector">
+      <div class="size-title">Board Size:</div>
+      <div class="size-buttons">
+        <button class="size-btn" data-size="3">3×3 (Easy)</button>
+        <button class="size-btn active" data-size="4">4×4 (Normal)</button>
+        <button class="size-btn" data-size="5">5×5 (Hard)</button>
+      </div>
     </div>
 
     <div class="stats-container">
@@ -34,14 +217,56 @@
         <div class="stat-label">Best Score</div>
         <div class="stat-value" id="best-score-display">0</div>
       </div>
+      <div class="stat-card" id="timer-card" style="display: none;">
+        <div class="stat-label">Time</div>
+        <div class="stat-value" id="timer-display">60</div>
+      </div>
+      <div class="stat-card" id="target-moves-card" style="display: none;">
+        <div class="stat-label">Moves Left</div>
+        <div class="stat-value" id="target-moves-display">50</div>
+      </div>
     </div>
 
-    <div class="challenge-card">
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button class="action-btn" id="undo-btn" title="Undo last move">
+        <span>↶</span> Undo (<span id="undo-count">3</span>)
+      </button>
+      <button class="action-btn" id="hint-btn" title="Show best next move">
+        <span>💡</span> Hint
+      </button>
+    </div>
+
+    <!-- Power-ups -->
+    <div class="powerups-container">
+      <div class="powerups-title">Power-ups:</div>
+      <div class="powerups-grid">
+        <button class="powerup-btn" id="shuffle-btn" title="Shuffle all tiles">
+          <span>🔀</span> Shuffle
+        </button>
+        <button class="powerup-btn" id="remove-btn" title="Remove one tile">
+          <span>🗑️</span> Remove
+        </button>
+        <button class="powerup-btn" id="freeze-btn" title="Freeze new tiles for 3 moves">
+          <span>❄️</span> Freeze
+        </button>
+        <button class="powerup-btn" id="double-btn" title="Next merge counts double">
+          <span>2×</span> Double
+        </button>
+      </div>
+    </div>
+
+    <div class="challenge-card" id="challenge-card">
       <div class="challenge-title" id="challenge">🎯 Daily Challenge: Loading...</div>
       <div id="challenge-progress-text" style="font-size: 0.85rem; color: #6d4c41; margin-top: 0.5rem;">Progress: 0 / 0</div>
       <div class="progress-bar-container">
         <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
       </div>
+    </div>
+
+    <div class="target-card" id="target-card" style="display: none;">
+      <div class="challenge-title">🎯 Target: Reach <span id="target-tile-name">Thali</span> (<span id="target-tile-value">2048</span>)</div>
+      <div id="target-progress-text" style="font-size: 0.85rem; color: #6d4c41; margin-top: 0.5rem;">Highest: 0</div>
     </div>
 
   <div class="game-container" id="game-board">
@@ -65,6 +290,19 @@
     </div>
   </div>
 
+  <!-- Hidden audio elements -->
+  <audio id="merge-sound" preload="auto"></audio>
+  <audio id="move-sound" preload="auto"></audio>
+  <audio id="achievement-sound" preload="auto"></audio>
+  <audio id="background-music" loop preload="auto"></audio>
+
+  <script src="js/loading.js"></script>
+  <script src="js/error-handler.js"></script>
+  <script src="js/onboarding.js"></script>
+  <script src="js/help.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/particles.js"></script>
+  <script src="js/themes.js"></script>
   <script src="js/game.js"></script>
 </body>
 </html>
